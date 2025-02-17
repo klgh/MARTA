@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MARTA Train Arrival Info</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            padding: 20px;
+            background-color: #f4f4f4;
+            text-align: center;
+        }
+        h1 {
+            color: #333;
+        }
+        .train-container {
+            display: flex;
+            flex-wrap: wrap;
+            justify-content: center;
+        }
+        .train-line {
+            width: 90%;
+            max-width: 600px;
+            background: white;
+            margin: 15px;
+            padding: 15px;
+            border-radius: 10px;
+            box-shadow: 0px 4px 8px rgba(0, 0, 0, 0.2);
+        }
+        .train-line h2 {
+            background: #007bff;
+            color: white;
+            padding: 10px;
+            border-radius: 5px;
+        }
+        .train {
+            background: #fff;
+            padding: 10px;
+            margin-top: 10px;
+            border-radius: 5px;
+            border-left: 5px solid #007bff;
+        }
+        .train.red { border-left-color: red; }
+        .train.blue { border-left-color: blue; }
+        .train.green { border-left-color: green; }
+        .train.gold { border-left-color: goldenrod; }
+        .train.no-delay { background: #d4edda; }
+        .train.minor-delay { background: #fff3cd; }
+        .train.major-delay { background: #f8d7da; }
+        .train p {
+            margin: 5px 0;
+        }
+    </style>
+</head>
+<body>
+    <h1>MARTA Real-Time Train Arrival Info</h1>
+    <div id="trainData" class="train-container">
+        <p>Loading train data...</p>
+    </div>
+
+    <script>
+        const apiUrl = "http://localhost:3000/marta-trains"; // Update to your proxy backend
+
+        function formatDelay(delay) {
+            if (!delay) return { text: "No Delay Info", class: "no-delay" };
+
+            const match = delay.match(/T(\d+)S/);
+            if (!match) return { text: "N/A", class: "no-delay" };
+
+            const seconds = parseInt(match[1], 10);
+            const minutes = Math.floor(seconds / 60);
+            const remainingSeconds = seconds % 60;
+            let delayText = minutes > 0 ? `${minutes} min` : `${remainingSeconds} sec`;
+
+            // Determine delay severity
+            let delayClass = "no-delay";
+            if (seconds > 60 && seconds <= 300) delayClass = "minor-delay";  // 1-5 mins
+            if (seconds > 300) delayClass = "major-delay"; // More than 5 mins
+
+            return { text: `${delayText} delay`, class: delayClass };
+        }
+
+        fetch(apiUrl)
+            .then(response => response.json())
+            .then(data => {
+                if (!Array.isArray(data) || data.length === 0) {
+                    document.getElementById('trainData').innerHTML = "<p>No train data available.</p>";
+                    return;
+                }
+
+                // Group train arrivals by line
+                const groupedTrains = {};
+                data.forEach(train => {
+                    const line = train.LINE || "Unknown"; // Handle missing data
+                    if (!groupedTrains[line]) {
+                        groupedTrains[line] = [];
+                    }
+                    groupedTrains[line].push(train);
+                });
+
+                // Sort and limit to 5 trains per line
+                Object.keys(groupedTrains).forEach(line => {
+                    groupedTrains[line].sort((a, b) => new Date(a.NEXT_ARR) - new Date(b.NEXT_ARR));
+                    groupedTrains[line] = groupedTrains[line].slice(0, 5);
+                });
+
+                // Generate HTML
+                let htmlContent = "";
+                Object.entries(groupedTrains).forEach(([line, trains]) => {
+                    htmlContent += `<div class="train-line"><h2>${line} Line</h2>`;
+
+                    trains.forEach(train => {
+                        const delayInfo = formatDelay(train.DELAY);
+                        htmlContent += `
+                        <div class="train ${line.toLowerCase()} ${delayInfo.class}">
+                            <p><strong>Train ID:</strong> ${train.TRAIN_ID}</p>
+                            <p><strong>Station:</strong> ${train.STATION}</p>
+                            <p><strong>Destination:</strong> ${train.DESTINATION}</p>
+                            <p><strong>Direction:</strong> ${train.DIRECTION}</p>
+                            <p><strong>Next Arrival:</strong> ${train.NEXT_ARR}</p>
+                            <p><strong>Waiting Time:</strong> ${train.WAITING_TIME}</p>
+                            <p><strong>Delay:</strong> ${delayInfo.text}</p>
+                            <p><strong>Real-Time:</strong> ${train.IS_REALTIME ? "Yes" : "No"}</p>
+                        </div>`;
+                    });
+
+                    htmlContent += `</div>`;
+                });
+
+                document.getElementById('trainData').innerHTML = htmlContent;
+            })
+            .catch(error => {
+                document.getElementById('trainData').innerHTML = '<p>Error loading train data. Please try again later.</p>';
+                console.error('Error fetching MARTA data:', error);
+            });
+    </script>
+</body>
+</html>
